@@ -1,18 +1,13 @@
-from langchain.agents import AgentExecutor, StructuredChatAgent
 from langchain.agents.agent import AgentOutputParser
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain.tools import Tool
 from langchain_core.runnables import Runnable
 from langchain.memory import ConversationBufferMemory
-from langchain.agents import StructuredChatAgent, AgentExecutor
-from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain.chains import LLMChain
 from langchain.schema.output_parser import StrOutputParser
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_community.llms import LlamaCpp
-from langchain.agents import initialize_agent
-from langchain.agents import AgentType
-from langchain.llms import LlamaCpp
+from langchain.agents import initialize_agent,  AgentType,  AgentExecutor, StructuredChatAgent
 import requests
 import os
 
@@ -29,7 +24,14 @@ llm = LlamaCpp(
 
 def search_web(query):
     response = requests.get(f"https://api.duckduckgo.com/?q={query}&format=json")
-    return response.json()["Abstract"] or response.json()["RelatedTopics"][0]["Text"]
+    data = response.json()
+    if data.get("Abstract"):
+        return data["Abstract"]
+    elif data.get("RelatedTopics"):
+        return data["RelatedTopics"][0].get("Text", "No relevant info found.")
+    else:
+        return "No relevant information found."
+
 
 search_tool = Tool(
     name="WebSearch",
@@ -47,9 +49,11 @@ summarization_tool = Tool(
     description="Use this tool ONLY if the user provides a block of text that needs to be summarized."
 )
 
+tools=[search_tool, summarization_tool]
+
 tool_descriptions = "\n".join([f"{tool.name}: {tool.description}" for tool in tools])
 
-prompt = ChatPromptTemplate.from_template("""
+prompt = ChatPromptTemplate.from_template([("system",f"""
         You are a helpful agent. You can use the following tools:
 
         {tool_descriptions}
@@ -81,13 +85,12 @@ prompt = ChatPromptTemplate.from_template("""
 
 
         Begin!
+        """),
 
-        {agent_scratchpad}
-        """)
+        MessagesPlaceholder("agent_scratchpad"),
+        ])
 
 memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
-
-tools=[search_tool, summarization_tool]
 
 llm_chain = LLMChain(llm=llm, prompt=prompt)
 
