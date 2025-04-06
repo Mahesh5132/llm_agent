@@ -8,6 +8,7 @@ from langchain.schema.output_parser import StrOutputParser
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_community.llms import LlamaCpp
 from langchain.agents import initialize_agent,  AgentType,  AgentExecutor, StructuredChatAgent
+from langchain.prompts import ChatPromptTemplate
 import requests
 import os
 
@@ -53,52 +54,54 @@ tools=[search_tool, summarization_tool]
 
 tool_descriptions = "\n".join([f"{tool.name}: {tool.description}" for tool in tools])
 
-prompt = ChatPromptTemplate.from_template([("system",f"""
-        You are a helpful agent. You can use the following tools:
 
-        {tool_descriptions}
+prompt = ChatPromptTemplate.from_template(
+    """
+    You are a helpful agent. You can use the following tools:
 
-        Use the following format:
+    Summarizer: Use this tool ONLY if the user provides a block of text that needs to be summarized.
+    WebSearch: Use this tool ONLY when you need to look up fresh or external information that is NOT already provided in the prompt.
+    
+    Use the following format:
 
-        Question: {input}
-        Thought: You should think about what to do
-        Action: the name of the tool to use
-        Action Input: the input to the tool
-        Observation: the result of the action
-        ... (repeat Thought/Action/Observation as needed)
-        Thought: I now know the final answer
-        Final Answer: the answer to the question
+    Question: {input}
+    Thought: You should think about what to do
+    Action: the name of the tool to use
+    Action Input: the input to the tool
+    Observation: the result of the action
+    ... (repeat Thought/Action/Observation as needed)
+    Thought: I now know the final answer
+    Final Answer: the answer to the question
 
-        ### Example 1
-        Question: What is the latest news about AI?
-        Thought: The user is asking for fresh information not already in the prompt. I should use WebSearch.
-        Action: <WebSearch>
-        Action Input: <"latest news about AI">
-        Final Answer: <your answer here>
+    ### Example 1
+    Question: What is the latest news about AI?
+    Thought: The user is asking for fresh information not already in the prompt. I should use WebSearch.
+    Action: <WebSearch>
+    Action Input: <"latest news about AI">
+    Final Answer: <your answer here>
 
-        ### Example 2
-        Question: Summarize this: 'AI is rapidly evolving. Deep learning has made significant progress in the last few years...'
-        Thought: The user has provided a block of text. I should summarize it.
-        Action: <Summarizer>
-        Action Input: <"AI is rapidly evolving. Deep learning has made significant progress...">
-        Final Answer: <your answer here>
+    ### Example 2
+    Question: Summarize this: 'AI is rapidly evolving. Deep learning has made significant progress in the last few years...'
+    Thought: The user has provided a block of text. I should summarize it.
+    Action: <Summarizer>
+    Action Input: <"AI is rapidly evolving. Deep learning has made significant progress...">
+    Final Answer: <your answer here>
 
+    Begin!
 
-        Begin!
-        """),
-
-        MessagesPlaceholder("agent_scratchpad"),
-        ])
+    {agent_scratchpad}
+    """
+)
 
 memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
 
 llm_chain = LLMChain(llm=llm, prompt=prompt)
 
-agent = StructuredChatAgent(llm_chain=llm_chain, tools=[search_tool, summarization_tool])
+agent = StructuredChatAgent(llm_chain=llm_chain, tools=tools)
 
 agent_executor = AgentExecutor.from_agent_and_tools(
     agent=agent,
-    tools=[search_tool, summarization_tool],
+    tools=tools,
     memory=memory,
     verbose=True
 )
